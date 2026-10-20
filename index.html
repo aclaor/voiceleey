@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voiceleey Studio</title>
+<meta name="description" content="Free in-browser text-to-speech and video narration studio.">
+<style>
+:root{--bg:#0f1115;--card:#181b22;--line:#2a2f3a;--text:#e8eaf0;--muted:#9aa3b2;--acc:#6c8cff;--acc2:#4fd1a5;--err:#ff6b6b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{padding:20px 16px;text-align:center;border-bottom:1px solid var(--line)}
+header h1{margin:0;font-size:24px}header p{margin:4px 0 0;color:var(--muted)}
+main{max-width:1100px;margin:0 auto;padding:16px;display:grid;gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+.card h2{margin:0 0 12px;font-size:17px}
+.tabs{display:flex;gap:8px}
+.tab{flex:1;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--text);cursor:pointer;font-weight:600}
+.tab.active{background:var(--acc);border-color:var(--acc)}
+textarea,select,input[type=number],input[type=text]{width:100%;background:#0f1115;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:10px;font:inherit}
+textarea{min-height:110px;resize:vertical}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.row>*{flex:1;min-width:140px}
+label{display:block;font-size:13px;color:var(--muted);margin:8px 0 4px}
+button{background:var(--acc);color:#fff;border:0;border-radius:8px;padding:10px 14px;font:inherit;font-weight:600;cursor:pointer}
+button.sec{background:#2a2f3a}button.ok{background:var(--acc2);color:#062}
+button:disabled{opacity:.5;cursor:not-allowed}
+#status{font-size:14px;color:var(--muted);min-height:20px}
+#status.err{color:var(--err)}
+.bar{height:6px;background:#2a2f3a;border-radius:4px;overflow:hidden;margin-top:6px}
+.bar>div{height:100%;width:0;background:var(--acc2);transition:width .2s}
+video{width:100%;max-height:420px;background:#000;border-radius:10px}
+.grid2{display:grid;grid-template-columns:1.2fr 1fr;gap:16px}
+@media(max-width:800px){.grid2{grid-template-columns:1fr}}
+.seg{border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px;display:grid;grid-template-columns:90px 1fr auto;gap:8px;align-items:start}
+.seg input{padding:6px}.seg textarea{min-height:56px}
+.seg .meta{font-size:12px;color:var(--muted);grid-column:1/-1}
+.seg .warn{color:#ffb84d}
+.hidden{display:none}
+small{color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <h1>🎙️ Voiceleey Studio</h1>
+  <p>Text-to-speech and video narration — runs 100% in your browser. Free, private, no sign-up.</p>
+</header>
+
+<main>
+  <div class="card">
+    <div class="row">
+      <div><label>Voice</label>
+        <select id="voice">
+          <option value="af_heart">Heart — US female (warm)</option>
+          <option value="af_bella">Bella — US female (bright)</option>
+          <option value="af_nicole">Nicole — US female (soft)</option>
+          <option value="am_michael">Michael — US male</option>
+          <option value="am_fenrir">Fenrir — US male (deep)</option>
+          <option value="am_puck">Puck — US male (upbeat)</option>
+          <option value="bf_emma">Emma — UK female</option>
+          <option value="bm_george">George — UK male</option>
+          <option value="bm_fable">Fable — UK male (storyteller)</option>
+        </select></div>
+      <div><label>Speed</label>
+        <input id="speed" type="number" min="0.5" max="2" step="0.05" value="1"></div>
+      <div><label>&nbsp;</label><button id="loadBtn">Load voice engine</button></div>
+    </div>
+    <div id="status" style="margin-top:10px">Voice engine not loaded yet (~90 MB download the first time, cached afterwards).</div>
+    <div class="bar"><div id="prog"></div></div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="tts">Text → Speech</button>
+    <button class="tab" data-tab="video">Narrate a Video</button>
+  </div>
+
+  <!-- TEXT TO SPEECH -->
+  <section id="tab-tts" class="card">
+    <h2>Text to Speech</h2>
+    <textarea id="ttsText" placeholder="Paste your script here...">Welcome to TourGuyed. Find local guides who know the places the guidebooks miss. Book your next adventure today.</textarea>
+    <div class="row" style="margin-top:10px">
+      <button id="ttsGen" disabled>✨ Generate speech</button>
+      <button id="ttsDl" class="sec" disabled>⬇ Download WAV</button>
+    </div>
+    <audio id="ttsAudio" controls style="width:100%;margin-top:12px" class="hidden"></audio>
+  </section>
+
+  <!-- VIDEO NARRATION -->
+  <section id="tab-video" class="card hidden">
+    <h2>Narrate a Video</h2>
+    <input type="file" id="videoFile" accept="video/*">
+    <div class="grid2" style="margin-top:12px">
+      <div>
+        <video id="video" controls playsinline></video>
+        <div class="row" style="margin-top:8px">
+          <div><label>Original video volume</label><input id="origVol" type="range" min="0" max="1" step="0.05" value="0.6"></div>
+          <div><label>Volume while narrating (ducking)</label><input id="duckVol" type="range" min="0" max="1" step="0.05" value="0.15"></div>
+          <div><label>Narration volume</label><input id="narrVol" type="range" min="0" max="2" step="0.05" value="1"></div>
+        </div>
+      </div>
+      <div>
+        <div class="row">
+          <button id="addSeg" class="sec">＋ Add line at current time</button>
+          <button id="autoSplit" class="sec">Paste full script…</button>
+        </div>
+        <div id="segs" style="margin-top:10px;max-height:380px;overflow:auto"></div>
+        <small>Each line starts speaking at its time (seconds). Tip: pause the video where you want a line, then click “Add line”.</small>
+      </div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button id="genAll" disabled>✨ Generate all narration</button>
+      <button id="preview" class="sec" disabled>▶ Preview with narration</button>
+      <button id="exportBtn" class="ok" disabled>🎬 Export narrated video</button>
+    </div>
+    <small>Export records in real time (a 60s video takes ~60s). Keep this tab visible while exporting.</small>
+    <a id="dlLink" class="hidden" style="display:block;margin-top:10px;color:var(--acc2)"></a>
+  </section>
+</main>
+
+<script type="module">
+import { KokoroTTS } from "https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/+esm";
+
+const $ = id => document.getElementById(id);
+let tts = null, ctx = null, lastWav = null;
+const segs = []; // {time, text, buffer}
+
+/* ---------- status ---------- */
+function status(msg, err=false){ $("status").textContent = msg; $("status").className = err ? "err" : ""; }
+function prog(p){ $("prog").style.width = Math.round(p*100) + "%"; }
+function audioCtx(){ if(!ctx) ctx = new AudioContext(); if(ctx.state==="suspended") ctx.resume(); return ctx; }
+
+/* ---------- tabs ---------- */
+document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
+  document.querySelectorAll(".tab").forEach(x => x.classList.toggle("active", x===t));
+  $("tab-tts").classList.toggle("hidden", t.dataset.tab!=="tts");
+  $("tab-video").classList.toggle("hidden", t.dataset.tab!=="video");
+});
+
+/* ---------- load model ---------- */
+$("loadBtn").onclick = async () => {
+  $("loadBtn").disabled = true;
+  try {
+    const device = ("gpu" in navigator) ? "webgpu" : "wasm";
+    status(`Loading voice engine (${device.toUpperCase()})…`);
+    const files = {};
+    tts = await KokoroTTS.from_pretrained("onnx-community/Kokoro-82M-v1.0-ONNX", {
+      dtype: device==="webgpu" ? "fp32" : "q8", device,
+      progress_callback: p => {
+        if (p.status==="progress" && p.total){ files[p.file] = [p.loaded, p.total];
+          const v = Object.values(files); prog(v.reduce((a,b)=>a+b[0],0) / v.reduce((a,b)=>a+b[1],0)); }
+      }
+    }).catch(async e => {
+      if (device!=="webgpu") throw e;
+      status("WebGPU failed, retrying on CPU…");
+      return KokoroTTS.from_pretrained("onnx-community/Kokoro-82M-v1.0-ONNX", { dtype:"q8", device:"wasm" });
+    });
+    prog(1); status("✅ Voice engine ready.");
+    $("loadBtn").textContent = "Engine loaded";
+    ["ttsGen","genAll"].forEach(id => $(id).disabled = false);
+  } catch(e){ console.error(e); status("Could not load the voice engine: " + e.message, true); $("loadBtn").disabled = false; }
+};
+
+/* ---------- speech helpers ---------- */
+function splitText(text, max=300){
+  const sentences = text.replace(/\s+/g," ").trim().match(/[^.!?]+[.!?]*/g) || [];
+  const out=[]; let cur="";
+  for (const s of sentences){ if((cur+" "+s).length>max && cur){ out.push(cur.trim()); cur=s; } else cur += " "+s; }
+  if (cur.trim()) out.push(cur.trim());
+  return out;
+}
+async function synth(text){ // -> {data: Float32Array, sr}
+  const parts = splitText(text), chunks=[]; let sr = 24000;
+  for (const p of parts){
+    const r = await tts.generate(p, { voice: $("voice").value, speed: parseFloat($("speed").value)||1 });
+    sr = r.sampling_rate; chunks.push(r.audio, new Float32Array(Math.round(sr*0.15)));
+  }
+  const len = chunks.reduce((a,c)=>a+c.length,0), data = new Float32Array(len); let o=0;
+  for (const c of chunks){ data.set(c,o); o+=c.length; }
+  return { data, sr };
+}
+function toBuffer({data,sr}){ const b = audioCtx().createBuffer(1,data.length,sr); b.copyToChannel(data,0); return b; }
+function wavBlob({data,sr}){
+  const buf = new ArrayBuffer(44+data.length*2), v = new DataView(buf);
+  const w=(o,s)=>[...s].forEach((c,i)=>v.setUint8(o+i,c.charCodeAt(0)));
+  w(0,"RIFF"); v.setUint32(4,36+data.length*2,true); w(8,"WAVE"); w(12,"fmt ");
+  v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true); v.setUint32(24,sr,true);
+  v.setUint32(28,sr*2,true); v.setUint16(32,2,true); v.setUint16(34,16,true); w(36,"data"); v.setUint32(40,data.length*2,true);
+  for (let i=0;i<data.length;i++) v.setInt16(44+i*2, Math.max(-1,Math.min(1,data[i]))*0x7fff, true);
+  return new Blob([buf],{type:"audio/wav"});
+}
+
+/* ---------- TTS tab ---------- */
+$("ttsGen").onclick = async () => {
+  const text = $("ttsText").value.trim(); if(!text) return status("Enter some text first.", true);
+  $("ttsGen").disabled = true; status("Generating speech…");
+  try {
+    const out = await synth(text); lastWav = wavBlob(out);
+    $("ttsAudio").src = URL.createObjectURL(lastWav); $("ttsAudio").classList.remove("hidden"); $("ttsAudio").play();
+    $("ttsDl").disabled = false; status(`✅ Done — ${(out.data.length/out.sr).toFixed(1)}s of audio.`);
+  } catch(e){ console.error(e); status("Generation failed: "+e.message, true); }
+  $("ttsGen").disabled = false;
+};
+$("ttsDl").onclick = () => { const a=document.createElement("a"); a.href=URL.createObjectURL(lastWav); a.download="voiceover.wav"; a.click(); };
+
+/* ---------- video tab ---------- */
+const video = $("video");
+let vGain, nGain, recDest, playing = [];
+
+$("videoFile").onchange = e => {
+  const f = e.target.files[0]; if(!f) return;
+  video.src = URL.createObjectURL(f); $("dlLink").classList.add("hidden");
+  video.onloadedmetadata = () => { if(!segs.length) addSeg(0, "Your first narration line goes here."); updateButtons(); };
+};
+
+function setupGraph(){
+  const c = audioCtx(); if (vGain) return;
+  const src = c.createMediaElementSource(video);
+  vGain = c.createGain(); nGain = c.createGain(); recDest = c.createMediaStreamDestination();
+  src.connect(vGain); [vGain,nGain].forEach(g => { g.connect(c.destination); g.connect(recDest); });
+}
+
+function addSeg(time, text=""){ segs.push({ time: +time.toFixed(1), text, buffer:null }); segs.sort((a,b)=>a.time-b.time); renderSegs(); }
+function renderSegs(){
+  const box = $("segs"); box.innerHTML = "";
+  segs.forEach((s,i) => {
+    const d = document.createElement("div"); d.className = "seg";
+    d.innerHTML = `<input type="number" step="0.1" min="0" value="${s.time}"><textarea></textarea><button class="sec" title="Remove">✕</button><div class="meta"></div>`;
+    const [t, ta, del, meta] = d.children;
+    ta.value = s.text;
+    t.onchange = () => { s.time = Math.max(0, +t.value||0); segs.sort((a,b)=>a.time-b.time); renderSegs(); };
+    ta.oninput = () => { s.text = ta.value; s.buffer = null; meta.textContent = "Not generated yet"; updateButtons(); };
+    del.onclick = () => { segs.splice(i,1); renderSegs(); };
+    if (s.buffer){
+      const end = s.time + s.buffer.duration, next = segs[i+1];
+      meta.innerHTML = `Voice: ${s.buffer.duration.toFixed(1)}s (ends at ${end.toFixed(1)}s)` +
+        (next && end > next.time ? ` <span class="warn">⚠ overlaps next line</span>` : "") +
+        (video.duration && end > video.duration ? ` <span class="warn">⚠ runs past video end</span>` : "");
+    } else meta.textContent = "Not generated yet";
+    box.appendChild(d);
+  });
+  updateButtons();
+}
+function updateButtons(){
+  const ready = video.src && segs.length && segs.every(s => s.buffer || !s.text.trim());
+  $("preview").disabled = $("exportBtn").disabled = !ready;
+}
+
+$("addSeg").onclick = () => addSeg(video.currentTime || 0);
+$("autoSplit").onclick = () => {
+  const script = prompt("Paste your full script. Each sentence becomes a line, spread evenly across the video (adjust times after).");
+  if (!script) return;
+  const lines = script.match(/[^.!?]+[.!?]*/g).map(x=>x.trim()).filter(Boolean);
+  const dur = video.duration || lines.length*4;
+  segs.length = 0; lines.forEach((l,i) => segs.push({ time:+(i*dur/lines.length).toFixed(1), text:l, buffer:null }));
+  renderSegs();
+};
+
+$("genAll").onclick = async () => {
+  $("genAll").disabled = true;
+  try {
+    const todo = segs.filter(s => s.text.trim() && !s.buffer);
+    for (let i=0;i<todo.length;i++){ status(`Generating line ${i+1} of ${todo.length}…`); prog(i/todo.length);
+      todo[i].buffer = toBuffer(await synth(todo[i].text)); }
+    prog(1); status("✅ Narration ready. Preview or export."); renderSegs();
+  } catch(e){ console.error(e); status("Generation failed: "+e.message, true); }
+  $("genAll").disabled = false;
+};
+
+/* schedule narration from the video's current position */
+function stopNarration(){ playing.forEach(p=>{ try{p.stop()}catch{} }); playing = [];
+  if (vGain){ vGain.gain.cancelScheduledValues(0); vGain.gain.value = +$("origVol").value; } }
+function startNarration(){
+  setupGraph(); stopNarration();
+  const c = ctx, now = c.currentTime, pos = video.currentTime;
+  const orig = +$("origVol").value, duck = +$("duckVol").value;
+  nGain.gain.value = +$("narrVol").value; vGain.gain.setValueAtTime(orig, now);
+  for (const s of segs){
+    if (!s.buffer || s.time + s.buffer.duration <= pos) continue;
+    const src = c.createBufferSource(); src.buffer = s.buffer; src.connect(nGain);
+    const offset = Math.max(0, pos - s.time), at = now + Math.max(0, s.time - pos);
+    src.start(at, offset); playing.push(src);
+    vGain.gain.setTargetAtTime(duck, at, 0.08);
+    vGain.gain.setTargetAtTime(orig, at + s.buffer.duration - offset, 0.15);
+  }
+}
+let narrate = false;
+video.addEventListener("play", () => { if (narrate) startNarration(); });
+video.addEventListener("pause", stopNarration);
+video.addEventListener("seeked", () => { if (narrate && !video.paused) startNarration(); });
+$("preview").onclick = () => { narrate = true; setupGraph(); video.currentTime = 0; video.play(); };
+
+/* ---------- export ---------- */
+$("exportBtn").onclick = async () => {
+  narrate = true; setupGraph(); stopNarration(); video.pause();
+  const canvas = document.createElement("canvas");
+  canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+  const g = canvas.getContext("2d");
+  const stream = new MediaStream([...canvas.captureStream(30).getVideoTracks(), ...recDest.stream.getAudioTracks()]);
+  const type = ["video/mp4;codecs=avc1,mp4a.40.2","video/mp4","video/webm;codecs=vp9,opus","video/webm"].find(t => MediaRecorder.isTypeSupported(t));
+  const rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 6_000_000 });
+  const chunks = []; rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+  ["exportBtn","preview","genAll"].forEach(id => $(id).disabled = true);
+  video.controls = false;
+
+  let raf; const draw = () => { g.drawImage(video,0,0,canvas.width,canvas.height);
+    prog(video.currentTime/video.duration); status(`Exporting… ${video.currentTime.toFixed(0)}s / ${video.duration.toFixed(0)}s`);
+    raf = requestAnimationFrame(draw); };
+
+  rec.onstop = () => {
+    cancelAnimationFrame(raf); video.controls = true;
+    const blob = new Blob(chunks, { type: type.split(";")[0] }), ext = type.includes("mp4") ? "mp4" : "webm";
+    const a = $("dlLink"); a.href = URL.createObjectURL(blob); a.download = `narrated-video.${ext}`;
+    a.textContent = `⬇ Download narrated video (${ext.toUpperCase()}, ${(blob.size/1e6).toFixed(1)} MB)`;
+    a.classList.remove("hidden"); prog(1); status("✅ Export finished."); updateButtons(); $("genAll").disabled = false;
+  };
+
+  video.currentTime = 0;
+  await new Promise(r => video.addEventListener("seeked", r, { once:true }));
+  // tail: keep recording if narration runs past the end
+  const lastEnd = Math.max(0, ...segs.filter(s=>s.buffer).map(s => s.time + s.buffer.duration));
+  video.onended = () => setTimeout(() => rec.stop(), Math.max(300, (lastEnd - video.duration)*1000 + 300));
+  rec.start(500); draw(); await video.play();
+};
+</script>
+</body>
+</html>
